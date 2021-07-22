@@ -62,60 +62,13 @@ function maxNode(): LiteralNode {
   return node;
 }
 
-/**
- * Generates a HuffmanCode corresponding to the fixed literal table
- */
-function generateFixedLiteralEncoding(): HuffmanEncoder {
-  const h = new HuffmanEncoder(MAX_NUM_LIT);
-  const { codes } = h;
-  let ch: number;
-  for (ch = 0; ch < h.codes.length; ch++) {
-    let bits: number;
-    let size: number;
-    if (ch < 144) {
-      // size 8, 000110000  .. 10111111
-      bits = ch + 48;
-      size = 8;
-    } else if (ch < 256) {
-      // size 9, 110010000 .. 111111111
-      bits = ch + 400 - 144;
-      size = 9;
-    } else if (ch < 280) {
-      // size 7, 0000000 .. 0010111
-      bits = ch - 256;
-      size = 7;
-    } else {
-      // size 8, 11000000 .. 11000111
-      bits = ch + 192 - 280;
-      size = 8;
-    }
-    codes[ch] = new Hcode(_reverseBits(bits, size), size);
-  }
-  return h;
-}
-
-function generateFixedOffsetEncoding(): HuffmanEncoder {
-  const h = new HuffmanEncoder(30);
-  const { codes } = h;
-  const offset = 5;
-  for (let ch = 0; ch < codes.length; ch++) {
-    codes[ch] = new Hcode(_reverseBits(ch, offset), offset);
-  }
-  return h;
-}
-
-export const fixedLiteralEncoding: HuffmanEncoder =
-  generateFixedLiteralEncoding();
-export const fixedOffsetEncoding: HuffmanEncoder =
-  generateFixedOffsetEncoding();
-
 export class HuffmanEncoder {
   codes: Hcode[];
-  freqcache: LiteralNode[] = [];
+  freqcache: LiteralNode[] | null = null;
   bitCount: number[] = new Array(17).fill(0);
 
   constructor(size: number) {
-    this.codes = Array.from({ length: size });
+    this.codes = Array.from({ length: size }, () => new Hcode());
   }
 
   bitLength(freq: number[]): number {
@@ -295,7 +248,10 @@ export class HuffmanEncoder {
       // Allocate a reusable buffer with the longest possible frequency table.
       // Possible lengths are codegenCodeCount, offsetCodeCount and maxNumLit.
       // The largest of these is maxNumLit, so we allocate for that case.
-      this.freqcache = [];
+      this.freqcache = Array.from(
+        { length: MAX_NUM_LIT + 1 },
+        () => new LiteralNode(),
+      );
     }
     const list = this.freqcache.slice(0, freq.length + 1);
     // Number of non-zero literals
@@ -332,6 +288,53 @@ export class HuffmanEncoder {
     this.assignEncodingAndSize(bitCount, list);
   }
 }
+
+/**
+ * Generates a HuffmanCode corresponding to the fixed literal table
+ */
+function generateFixedLiteralEncoding(): HuffmanEncoder {
+  const h = new HuffmanEncoder(MAX_NUM_LIT);
+  const { codes } = h;
+  let ch: number;
+  for (ch = 0; ch < h.codes.length; ch++) {
+    let bits: number;
+    let size: number;
+    if (ch < 144) {
+      // size 8, 000110000  .. 10111111
+      bits = ch + 48;
+      size = 8;
+    } else if (ch < 256) {
+      // size 9, 110010000 .. 111111111
+      bits = ch + 400 - 144;
+      size = 9;
+    } else if (ch < 280) {
+      // size 7, 0000000 .. 0010111
+      bits = ch - 256;
+      size = 7;
+    } else {
+      // size 8, 11000000 .. 11000111
+      bits = ch + 192 - 280;
+      size = 8;
+    }
+    codes[ch] = new Hcode(_reverseBits(bits, size), size);
+  }
+  return h;
+}
+
+function generateFixedOffsetEncoding(): HuffmanEncoder {
+  const h = new HuffmanEncoder(30);
+  const { codes } = h;
+  const offset = 5;
+  for (let ch = 0; ch < codes.length; ch++) {
+    codes[ch] = new Hcode(_reverseBits(ch, offset), offset);
+  }
+  return h;
+}
+
+export const fixedLiteralEncoding: HuffmanEncoder =
+  generateFixedLiteralEncoding();
+export const fixedOffsetEncoding: HuffmanEncoder =
+  generateFixedOffsetEncoding();
 
 function compareByLiteral(lhs: LiteralNode, rhs: LiteralNode) {
   return lhs.literal - rhs.literal;

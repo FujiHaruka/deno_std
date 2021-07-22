@@ -72,11 +72,6 @@ const OFFSET_BASE = [
 const codegenOrder = [16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15]
 
 export class HuffmanBitWriter {
-  // writer is the underlying writer.
-  // Do not use it directly; use the write method, which ensures
-  // that Write errors are sticky.
-  private writer: Deno.Writer;
-
   // Data waiting to be written is bytes[0:nbytes]
   // and then the low nbits of bits.  Data is always written
   // sequentially into the bytes array.
@@ -93,9 +88,12 @@ export class HuffmanBitWriter {
   codegenEncoding = new HuffmanEncoder(OFFSET_CODE_COUNT);
   err?: Error;
 
-  constructor(w: Deno.Writer) {
-    this.writer = w;
-  }
+  constructor(
+    // writer is the underlying writer.
+    // Do not use it directly; use the write method, which ensures
+    // that Write errors are sticky.
+    private writer: Deno.Writer,
+  ) {}
 
   reset(writer: Deno.Writer) {
     this.writer = writer;
@@ -131,7 +129,6 @@ export class HuffmanBitWriter {
       return;
     }
     try {
-      // TODO: error handling
       await this.writer.write(b);
     } catch (err) {
       this.err = err;
@@ -183,7 +180,7 @@ export class HuffmanBitWriter {
       n++;
     }
     if (n !== 0) {
-      this.write(this.bytes.slice(0, n));
+      await this.write(this.bytes.slice(0, n));
     }
     this.nbytes = 0;
     await this.write(bytes);
@@ -383,14 +380,14 @@ export class HuffmanBitWriter {
     if (isEof) {
       firstBits = 5;
     }
-    this.writeBits(firstBits, 3);
-    this.writeBits(numLiterals - 257, 5);
-    this.writeBits(numOffsets - 1, 5);
-    this.writeBits(numCodegens - 4, 4);
+    await this.writeBits(firstBits, 3);
+    await this.writeBits(numLiterals - 257, 5);
+    await this.writeBits(numOffsets - 1, 5);
+    await this.writeBits(numCodegens - 4, 4);
 
     for (let i = 0; i < numCodegens; i++) {
       const value = this.codegenEncoding.codes[codegenOrder[i]].len;
-      this.writeBits(value, 3);
+      await this.writeBits(value, 3);
     }
 
     let i = 0;
@@ -428,7 +425,7 @@ export class HuffmanBitWriter {
       flag = 1;
     }
     await this.writeBits(flag, 3);
-    this.flush();
+    await this.flush();
     await this.writeBits(length, 16);
     await this.writeBits(~length, 16);
   }
@@ -510,16 +507,16 @@ export class HuffmanBitWriter {
 
     // Stored bytes?
     if (storable && storedSize < size) {
-      this.writeStoredHeader(input.length, eof);
+      await this.writeStoredHeader(input.length, eof);
       await this.writeBytes(input);
       return;
     }
 
     // Huffman.
     if (literalEncoding === fixedLiteralEncoding) {
-      this.writeFixedHeader(eof);
+      await this.writeFixedHeader(eof);
     } else {
-      this.writeDynamicHeader(numLiterals, numOffsets, numCodegens, eof);
+      await this.writeDynamicHeader(numLiterals, numOffsets, numCodegens, eof);
     }
 
     // Write the tokens.
@@ -671,14 +668,14 @@ export class HuffmanBitWriter {
       numLiterals,
       numOffsets,
       this.literalEncoding,
-      huffOffset,
+      huffOffset.instance(),
     );
     this.codegenEncoding.generate(this.codegenFreq.slice(), 7);
     // numCodegens Figure out smallest code.
     // Always use dynamic Huffman or Store
     const [size, numCodegens] = this.dynamicSize(
       this.literalEncoding,
-      huffOffset,
+      huffOffset.instance(),
       0,
     );
 
@@ -691,7 +688,7 @@ export class HuffmanBitWriter {
     }
 
     // Huffman.
-    this.writeDynamicHeader(numLiterals, numOffsets, numCodegens, eof);
+    await this.writeDynamicHeader(numLiterals, numOffsets, numCodegens, eof);
     const encoding = this.literalEncoding.codes.slice(0, 257);
     let n = this.nbytes;
     for (const t of input) {
@@ -730,12 +727,20 @@ export class HuffmanBitWriter {
 
 // huffOffset is a static offset encoder used for huffman only encoding.
 // It can be reused since we will not be encoding offset values.
-let huffOffset: HuffmanEncoder = (() => {
-  const offsetFreq = new Array<number>(OFFSET_CODE_COUNT).fill(0);
-  offsetFreq[0] = 1;
-  huffOffset = new HuffmanEncoder(OFFSET_CODE_COUNT);
-  huffOffset.generate(offsetFreq, 15);
-  return huffOffset;
+const huffOffset = (() => {
+  let singleton: HuffmanEncoder | null = null;
+  const instance = (): HuffmanEncoder => {
+    if (singleton) {
+      return singleton;
+    }
+    const offsetFreq = new Array<number>(OFFSET_CODE_COUNT).fill(0);
+    offsetFreq[0] = 1;
+    const huffOffset = new HuffmanEncoder(OFFSET_CODE_COUNT);
+    huffOffset.generate(offsetFreq, 15);
+    singleton = huffOffset;
+    return huffOffset;
+  };
+  return { instance };
 })();
 
 // histogram accumulates a histogram of b in h.
