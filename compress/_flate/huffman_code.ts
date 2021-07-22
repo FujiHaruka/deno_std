@@ -35,7 +35,7 @@ interface LevelInfo {
 /**
  * huffman code with a bit code and bit length.
  */
-class Hcode {
+export class Hcode {
   constructor(
     public code = 0,
     public len = 0,
