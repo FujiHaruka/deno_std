@@ -7,7 +7,6 @@
 // 22 bits   xoffset = offset - MIN_OFFSET_SIZE, or literal
 const LENGTH_SHIFT = 22;
 const OFFSET_MASK = 1 << LENGTH_SHIFT - 1;
-const TYPE_MASK = 3 << 30;
 const LITERAL_TYPE = 0 << 30;
 export const MATCH_TYPE = 1 << 30;
 

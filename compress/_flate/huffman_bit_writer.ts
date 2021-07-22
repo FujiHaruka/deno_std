@@ -34,7 +34,7 @@ const MAX_STORE_BLOCK_SIZE = 65535;
 
 // The number of extra bits needed by length code X - LENGTH_CODES_START.
 // deno-fmt-ignore
-const LENGth_EXTRA_BITS = new Int8Array([
+const LENGTH_EXTRA_BITS = new Int8Array([
 	/* 257 */ 0, 0, 0,
 	/* 260 */ 0, 0, 0, 0, 0, 1, 1, 1, 1, 2,
 	/* 270 */ 2, 2, 2, 3, 3, 3, 3, 4, 4, 4,
@@ -51,7 +51,7 @@ const LENGTH_BASE = [
 
 // offset code word extra bits.
 // deno-fmt-ignore
-const OFFSEt_EXTRA_BITS = new Int8Array([
+const OFFSET_EXTRA_BITS = new Int8Array([
 	0, 0, 0, 0, 1, 1, 2, 2, 3, 3,
 	4, 4, 5, 5, 6, 6, 7, 7, 8, 8,
 	9, 9, 10, 10, 11, 11, 12, 12, 13, 13,
@@ -458,7 +458,7 @@ export class HuffmanBitWriter {
     tokens = tokens.concat(new Token(END_BLOCK_MARKER));
     const [numLiterals, numOffsets] = this.indexTokens(tokens);
 
-    let extraBits: number = 0;
+    let extraBits = 0;
     const [storedSize, storable] = this.storedSize(input);
     if (storable) {
       // We only bother calculating the costs of the extra bits required by
@@ -472,12 +472,12 @@ export class HuffmanBitWriter {
       ) {
         // First eight length codes have extra size = 0.
         extraBits += this.literalFreq[lengthCode] *
-          LENGth_EXTRA_BITS[lengthCode - LENGTH_CODES_START];
+          LENGTH_EXTRA_BITS[lengthCode - LENGTH_CODES_START];
       }
       for (let offsetCode = 4; offsetCode < numOffsets; offsetCode++) {
         // First four offset codes have extra size = 0.
         extraBits += this.offsetFreq[offsetCode] *
-          OFFSEt_EXTRA_BITS[offsetCode];
+          OFFSET_EXTRA_BITS[offsetCode];
       }
     }
 
@@ -626,7 +626,7 @@ export class HuffmanBitWriter {
       const length = token.length();
       const lCode = lengthCode(length);
       await this.writeCode(leCodes[lCode + LENGTH_CODES_START]);
-      const extraLengthBits = LENGth_EXTRA_BITS[lCode];
+      const extraLengthBits = LENGTH_EXTRA_BITS[lCode];
       if (extraLengthBits > 0) {
         const extraLength = length - LENGTH_BASE[lCode];
         await this.writeBits(extraLength, extraLengthBits);
@@ -635,110 +635,115 @@ export class HuffmanBitWriter {
       const offset = token.offset();
       const oCode = offsetCode(offset);
       await this.writeCode(oeCodes[oCode]);
-      const extraOffsetBits = OFFSEt_EXTRA_BITS[oCode];
+      const extraOffsetBits = OFFSET_EXTRA_BITS[oCode];
       if (extraOffsetBits > 0) {
         const extraOffset = offset - OFFSET_BASE[oCode];
         await this.writeBits(extraOffset, extraOffsetBits);
       }
     }
   }
+
+  // writeBlockHuff encodes a block of bytes as either
+  // Huffman encoded literals or uncompressed bytes if the
+  // results only gains very little from compression.
+  async writeBlockHuff(eof: boolean, input: Uint8Array) {
+    if (this.err) {
+      return;
+    }
+
+    // Clear histogram
+    this.literalFreq = this.literalFreq.map(() => 0);
+
+    // Add everything as literals
+    histogram(input, this.literalFreq);
+
+    this.literalFreq[END_BLOCK_MARKER] = 1;
+
+    const numLiterals = END_BLOCK_MARKER + 1;
+    this.offsetFreq[0] = 1;
+    const numOffsets = 1;
+
+    this.literalEncoding.generate(this.literalFreq, 15);
+
+    // Generate codegen and codegenFrequencies, which indicates how to encode
+    // the literalEncoding and the offsetEncoding.
+    this.generateCodegen(
+      numLiterals,
+      numOffsets,
+      this.literalEncoding,
+      huffOffset,
+    );
+    this.codegenEncoding.generate(this.codegenFreq.slice(), 7);
+    // numCodegens Figure out smallest code.
+    // Always use dynamic Huffman or Store
+    const [size, numCodegens] = this.dynamicSize(
+      this.literalEncoding,
+      huffOffset,
+      0,
+    );
+
+    // Store bytes, if we don't get a reasonable improvement.
+    const [ssize, storable] = this.storedSize(input);
+    if (storable && ssize < (size + size >> 4)) {
+      await this.writeStoredHeader(input.length, eof);
+      await this.writeBytes(input);
+      return;
+    }
+
+    // Huffman.
+    this.writeDynamicHeader(numLiterals, numOffsets, numCodegens, eof);
+    const encoding = this.literalEncoding.codes.slice(0, 257);
+    let n = this.nbytes;
+    for (const t of input) {
+      // Bitwriting inlined, ~30% speedup
+      const c = encoding[t];
+      this.bits |= c.code << this.nbits;
+      this.nbits += c.len;
+      if (this.nbits < 48) {
+        continue;
+      }
+      // Store 6 bytes
+      const bits = this.bits;
+      this.bits >>= 48;
+      this.nbits -= 48;
+      const bytes = this.bytes.slice(n, n + 6);
+      bytes[0] = bits;
+      bytes[1] = bits >> 8;
+      bytes[2] = bits >> 16;
+      bytes[3] = bits >> 24;
+      bytes[4] = bits >> 32;
+      bytes[5] = bits >> 40;
+      n += 6;
+      if (n < BUFFER_FLUSH_SIZE) {
+        continue;
+      }
+      await this.write(this.bytes.slice(0, n));
+      if (this.err) {
+        return; // Return early in the event of write failures
+      }
+      n = 0;
+    }
+    this.nbytes = n;
+    await this.writeCode(encoding[END_BLOCK_MARKER]);
+  }
 }
 
-// // huffOffset is a static offset encoder used for huffman only encoding.
-// // It can be reused since we will not be encoding offset values.
-// var huffOffset *huffmanEncoder
+// huffOffset is a static offset encoder used for huffman only encoding.
+// It can be reused since we will not be encoding offset values.
+let huffOffset: HuffmanEncoder = (() => {
+  const offsetFreq = new Array<number>(OFFSET_CODE_COUNT).fill(0);
+  offsetFreq[0] = 1;
+  huffOffset = new HuffmanEncoder(OFFSET_CODE_COUNT);
+  huffOffset.generate(offsetFreq, 15);
+  return huffOffset;
+})();
 
-// func init() {
-// 	offsetFreq := make([]int32, offsetCodeCount)
-// 	offsetFreq[0] = 1
-// 	huffOffset = newHuffmanEncoder(offsetCodeCount)
-// 	huffOffset.generate(offsetFreq, 15)
-// }
-
-// // writeBlockHuff encodes a block of bytes as either
-// // Huffman encoded literals or uncompressed bytes if the
-// // results only gains very little from compression.
-// func (w *huffmanBitWriter) writeBlockHuff(eof bool, input []byte) {
-// 	if w.err != nil {
-// 		return
-// 	}
-
-// 	// Clear histogram
-// 	for i := range w.literalFreq {
-// 		w.literalFreq[i] = 0
-// 	}
-
-// 	// Add everything as literals
-// 	histogram(input, w.literalFreq)
-
-// 	w.literalFreq[endBlockMarker] = 1
-
-// 	const numLiterals = endBlockMarker + 1
-// 	w.offsetFreq[0] = 1
-// 	const numOffsets = 1
-
-// 	w.literalEncoding.generate(w.literalFreq, 15)
-
-// 	// Figure out smallest code.
-// 	// Always use dynamic Huffman or Store
-// 	var numCodegens int
-
-// 	// Generate codegen and codegenFrequencies, which indicates how to encode
-// 	// the literalEncoding and the offsetEncoding.
-// 	w.generateCodegen(numLiterals, numOffsets, w.literalEncoding, huffOffset)
-// 	w.codegenEncoding.generate(w.codegenFreq[:], 7)
-// 	size, numCodegens := w.dynamicSize(w.literalEncoding, huffOffset, 0)
-
-// 	// Store bytes, if we don't get a reasonable improvement.
-// 	if ssize, storable := w.storedSize(input); storable && ssize < (size+size>>4) {
-// 		w.writeStoredHeader(len(input), eof)
-// 		w.writeBytes(input)
-// 		return
-// 	}
-
-// 	// Huffman.
-// 	w.writeDynamicHeader(numLiterals, numOffsets, numCodegens, eof)
-// 	encoding := w.literalEncoding.codes[:257]
-// 	n := w.nbytes
-// 	for _, t := range input {
-// 		// Bitwriting inlined, ~30% speedup
-// 		c := encoding[t]
-// 		w.bits |= uint64(c.code) << w.nbits
-// 		w.nbits += uint(c.len)
-// 		if w.nbits < 48 {
-// 			continue
-// 		}
-// 		// Store 6 bytes
-// 		bits := w.bits
-// 		w.bits >>= 48
-// 		w.nbits -= 48
-// 		bytes := w.bytes[n : n+6]
-// 		bytes[0] = byte(bits)
-// 		bytes[1] = byte(bits >> 8)
-// 		bytes[2] = byte(bits >> 16)
-// 		bytes[3] = byte(bits >> 24)
-// 		bytes[4] = byte(bits >> 32)
-// 		bytes[5] = byte(bits >> 40)
-// 		n += 6
-// 		if n < bufferFlushSize {
-// 			continue
-// 		}
-// 		w.write(w.bytes[:n])
-// 		if w.err != nil {
-// 			return // Return early in the event of write failures
-// 		}
-// 		n = 0
-// 	}
-// 	w.nbytes = n
-// 	w.writeCode(encoding[endBlockMarker])
-// }
-
-// // histogram accumulates a histogram of b in h.
-// //
-// // len(h) must be >= 256, and h's elements must be all zeroes.
-// func histogram(b []byte, h []int32) {
-// 	h = h[:256]
-// 	for _, t := range b {
-// 		h[t]++
-// 	}
-// }
+// histogram accumulates a histogram of b in h.
+//
+// len(h) must be >= 256, and h's elements must be all zeroes.
+function histogram(b: Uint8Array, h: number[]) {
+  h = h.slice(0, 256);
+  for (const t of b) {
+    h[t]++;
+  }
+}
