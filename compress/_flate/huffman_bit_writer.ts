@@ -108,9 +108,8 @@ export class HuffmanBitWriter {
       this.nbits = 0;
       return;
     }
-    const n = this.nbytes;
+    let n = this.nbytes;
     while (this.nbits !== 0) {
-      // TODO: uint8arrayにこうやって代入できる？
       this.bytes[n] = this.bits;
       this.bits >>= 8;
       if (this.nbits > 8) { // Avoid underflow
@@ -118,6 +117,7 @@ export class HuffmanBitWriter {
       } else {
         this.nbits = 0;
       }
+      n++
     }
     this.bits = 0;
     await this.write(this.bytes.slice(0, n));
