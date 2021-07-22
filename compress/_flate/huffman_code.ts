@@ -7,8 +7,8 @@ import { reverseBits } from "./utils.ts";
 export const MAX_NUM_LIT = 286;
 const MAX_BITS_LIMIT = 16;
 
-const MAX_UINT16 = 2 ^ 16 - 1;
-const MAX_INT32 = 2 ^ 31 - 1;
+const MAX_UINT16 = 2 ** 16 - 1;
+const MAX_INT32 = 2 ** 31 - 1;
 
 /**
  * the state of the constructed tree for a given depth.
@@ -112,7 +112,13 @@ export class HuffmanEncoder {
     // A bogus "Level 0" whose sole purpose is so that
     // level1.prev.needed==0.  This makes level1.nextPairFreq
     // be a legitimate value that never gets chosen.
-    const levels: LevelInfo[] = Array.from({ length: MAX_BITS_LIMIT });
+    const levels: LevelInfo[] = Array.from({ length: MAX_BITS_LIMIT }, () => ({
+      level: 0,
+      lastFreq: 0,
+      nextCharFreq: 0,
+      nextPairFreq: 0,
+      needed: 0
+    }));
 
     // leafCounts[i] counts the number of literals at the left
     // of ancestors of the rightmost node at level i.
@@ -145,7 +151,7 @@ export class HuffmanEncoder {
     let level = maxBits;
     while (true) {
       const l = levels[level];
-      if (l.nextPairFreq === Infinity && l.nextCharFreq == Infinity) {
+      if (l.nextPairFreq === MAX_INT32 && l.nextCharFreq == MAX_INT32) {
         // We've run out of both leafs and pairs.
         // End all calculations for this level.
         // To make sure we never come back to this level or any lower level,
@@ -171,7 +177,7 @@ export class HuffmanEncoder {
         l.lastFreq = l.nextPairFreq;
         // Take leaf counts from the lower level, except counts[level] remains the same.
         for (let k = 0; k < level; k++) {
-          leafCounts[level - 1][k] = leafCounts[level][k];
+          leafCounts[level][k] = leafCounts[level - 1][k];
         }
         levels[l.level - 1].needed = 2;
       }
@@ -202,16 +208,15 @@ export class HuffmanEncoder {
       throw new Error("leafCounts[maxBits][maxBits] != n");
     }
 
-    const bitCount = this.bitCount.slice(0, maxBits + 1);
     let bits = 1;
     const counts = leafCounts[maxBits];
     for (let level = maxBits; level > 0; level--) {
       // chain.leafCount gives the number of literals requiring at least "bits"
       // bits to encode.
-      bitCount[bits] = counts[level] - counts[level - 1];
+      this.bitCount[bits] = counts[level] - counts[level - 1];
       bits++;
     }
-    return bitCount;
+    return this.bitCount.slice(0, maxBits + 1);
   }
 
   // Look at the leaves and assign them a bit count and an encoding as specified
@@ -253,7 +258,7 @@ export class HuffmanEncoder {
         () => new LiteralNode(),
       );
     }
-    const list = this.freqcache.slice(0, freq.length + 1);
+    let list = this.freqcache.slice(0, freq.length + 1);
     // Number of non-zero literals
     let count = 0;
     // Set list to be the set of all non-zero literals and their frequencies
@@ -269,7 +274,7 @@ export class HuffmanEncoder {
     }
     list[freq.length] = new LiteralNode();
 
-    // list = list[:count]
+    list = list.slice(0, count)
     if (count <= 2) {
       // Handle the small cases here, because they are awkward for the general case code. With
       // two or fewer literals, everything has bit length 1.
@@ -283,7 +288,7 @@ export class HuffmanEncoder {
     list.sort(compareByFreq);
 
     // Get the number of literals for each bit count
-    const bitCount = this.bitCounts(list, maxBits);
+    const bitCount = this.bitCounts(list.slice(), maxBits);
     // And do the assignment
     this.assignEncodingAndSize(bitCount, list);
   }
