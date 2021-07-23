@@ -91,8 +91,8 @@ export class HuffmanBitWriter {
   offsetFreq = new Array<number>(OFFSET_CODE_COUNT).fill(0);
   codegen = new Uint8Array(MAX_NUM_LIT + OFFSET_CODE_COUNT + 1);
   literalEncoding = new HuffmanEncoder(MAX_NUM_LIT);
-  offsetEncoding = new HuffmanEncoder(CODEGEN_CODE_COUNT);
-  codegenEncoding = new HuffmanEncoder(OFFSET_CODE_COUNT);
+  offsetEncoding = new HuffmanEncoder(OFFSET_CODE_COUNT);
+  codegenEncoding = new HuffmanEncoder(CODEGEN_CODE_COUNT);
   err?: Error;
 
   constructor(
