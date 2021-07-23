@@ -71,11 +71,16 @@ const OFFSET_BASE = [
 // deno-fmt-ignore
 const codegenOrder = [16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15]
 
+const MAX_BYTES = 2 ** 8
+const byte = (n: number | BigInt): number => {
+  return typeof n === 'bigint' ? Number(n % BigInt(MAX_BYTES)) : Number(n) % MAX_BYTES
+}
+
 export class HuffmanBitWriter {
   // Data waiting to be written is bytes[0:nbytes]
   // and then the low nbits of bits.  Data is always written
   // sequentially into the bytes array.
-  bits = 0;
+  bits = BigInt(0);
   nbits = 0;
   bytes = new Uint8Array(BUFFER_SIZE);
   codegenFreq = new Array<number>(CODEGEN_CODE_COUNT).fill(0);
@@ -97,7 +102,7 @@ export class HuffmanBitWriter {
 
   reset(writer: Deno.Writer) {
     this.writer = writer;
-    this.bits = 0;
+    this.bits = BigInt(0);
     this.nbits = 0;
     this.nbytes = 0;
     this.err = undefined;
@@ -110,8 +115,8 @@ export class HuffmanBitWriter {
     }
     let n = this.nbytes;
     while (this.nbits !== 0) {
-      this.bytes[n] = this.bits;
-      this.bits >>= 8;
+      this.bytes[n] = byte(this.bits);
+      this.bits >>= BigInt(8);
       if (this.nbits > 8) { // Avoid underflow
         this.nbits -= 8;
       } else {
@@ -119,7 +124,7 @@ export class HuffmanBitWriter {
       }
       n++
     }
-    this.bits = 0;
+    this.bits = BigInt(0);
     await this.write(this.bytes.slice(0, n));
     this.nbytes = 0;
   }
@@ -139,20 +144,19 @@ export class HuffmanBitWriter {
     if (this.err) {
       return;
     }
-    this.bits |= b << this.nbits;
+    this.bits |= BigInt(b) << BigInt(this.nbits);
     this.nbits += nb;
     if (this.nbits >= 48) {
       const bits = this.bits;
-      this.bits >>= 48;
+      this.bits >>= BigInt(48);
       this.nbits -= 48;
       let n = this.nbytes;
-      const bytes = this.bytes.slice(n, n + 6);
-      bytes[0] = bits;
-      bytes[1] = bits >> 8;
-      bytes[2] = bits >> 16;
-      bytes[3] = bits >> 24;
-      bytes[4] = bits >> 32;
-      bytes[5] = bits >> 40;
+      this.bytes[n + 0] = byte(bits);
+      this.bytes[n + 1] = byte(bits >> BigInt(8));
+      this.bytes[n + 2] = byte(bits >> BigInt(16));
+      this.bytes[n + 3] = byte(bits >> BigInt(24));
+      this.bytes[n + 4] = byte(bits >> BigInt(32));
+      this.bytes[n + 5] = byte(bits >> BigInt(40));
       n += 6;
       if (n >= BUFFER_FLUSH_SIZE) {
         await this.write(this.bytes.slice(0, n));
@@ -174,8 +178,8 @@ export class HuffmanBitWriter {
       return;
     }
     while (this.nbits !== 0) {
-      this.bytes[n] = this.bits;
-      this.bits >>= 8;
+      this.bytes[n] = byte(this.bits);
+      this.bits >>= BigInt(8);
       this.nbits -= 8;
       n++;
     }
@@ -214,14 +218,12 @@ export class HuffmanBitWriter {
     // so far.
     const codegen = this.codegen; // cache
     // Copy the concatenated code sizes to codegen. Put a marker at the end.
-    let cgnl = codegen.slice(0, numLiterals);
-    for (let i = 0; i < cgnl.length; i++) {
-      cgnl[i] = litEnc.codes[i].len;
+    for (let i = 0; i < numLiterals; i++) {
+      codegen[i] = litEnc.codes[i].len;
     }
 
-    cgnl = codegen.slice(numLiterals, numLiterals + numOffsets);
-    for (let i = 0; i < cgnl.length; i++) {
-      cgnl[i] = offEnc.codes[i].len;
+    for (let i = numLiterals; i < numLiterals + numOffsets; i++) {
+      codegen[i] = offEnc.codes[i - numLiterals]?.len || 0;
     }
     codegen[numLiterals + numOffsets] = BAD_CODE;
 
@@ -304,7 +306,7 @@ export class HuffmanBitWriter {
       numCodegens--;
     }
     const header = 3 + 5 + 5 + 4 + (3 * numCodegens) +
-      this.codegenEncoding.bitLength(this.codegenFreq.slice()) +
+      this.codegenEncoding.bitLength(this.codegenFreq) +
       (this.codegenFreq[16]) * 2 +
       (this.codegenFreq[17]) * 3 +
       (this.codegenFreq[18]) * 7;
@@ -340,20 +342,19 @@ export class HuffmanBitWriter {
     if (this.err) {
       return;
     }
-    this.bits |= c.code << this.nbits;
+    this.bits |= BigInt(c.code) << BigInt(this.nbits);
     this.nbits += c.len;
     if (this.nbits >= 48) {
       const bits = this.bits;
-      this.bits >>= 48;
+      this.bits >>= BigInt(48);
       this.nbits -= 48;
       let n = this.nbytes;
-      const bytes = this.bytes.slice(n, n + 6);
-      bytes[0] = bits;
-      bytes[1] = bits >> 8;
-      bytes[2] = bits >> 16;
-      bytes[3] = bits >> 24;
-      bytes[4] = bits >> 32;
-      bytes[5] = bits >> 40;
+      this.bytes[n + 0] = byte(bits);
+      this.bytes[n + 1] = byte(bits >> BigInt(8));
+      this.bytes[n + 2] = byte(bits >> BigInt(16));
+      this.bytes[n + 3] = byte(bits >> BigInt(24));
+      this.bytes[n + 4] = byte(bits >> BigInt(32));
+      this.bytes[n + 5] = byte(bits >> BigInt(40));
       n += 6;
       if (n >= BUFFER_FLUSH_SIZE) {
         await this.write(this.bytes.slice(0, n));
@@ -492,7 +493,7 @@ export class HuffmanBitWriter {
       this.literalEncoding,
       this.offsetEncoding,
     );
-    this.codegenEncoding.generate(this.codegenFreq.slice(), 7);
+    this.codegenEncoding.generate(this.codegenFreq, 7);
     const [dynamicSize, numCodegens] = this.dynamicSize(
       this.literalEncoding,
       this.offsetEncoding,
@@ -544,7 +545,7 @@ export class HuffmanBitWriter {
       this.literalEncoding,
       this.offsetEncoding,
     );
-    this.codegenEncoding.generate(this.codegenFreq.slice(), 7);
+    this.codegenEncoding.generate(this.codegenFreq, 7);
     const [size, numCodegens] = this.dynamicSize(
       this.literalEncoding,
       this.offsetEncoding,
@@ -670,7 +671,7 @@ export class HuffmanBitWriter {
       this.literalEncoding,
       huffOffset.instance(),
     );
-    this.codegenEncoding.generate(this.codegenFreq.slice(), 7);
+    this.codegenEncoding.generate(this.codegenFreq, 7);
     // numCodegens Figure out smallest code.
     // Always use dynamic Huffman or Store
     const [size, numCodegens] = this.dynamicSize(
@@ -694,22 +695,21 @@ export class HuffmanBitWriter {
     for (const t of input) {
       // Bitwriting inlined, ~30% speedup
       const c = encoding[t];
-      this.bits |= c.code << this.nbits;
+      this.bits |= BigInt(c.code) << BigInt(this.nbits);
       this.nbits += c.len;
       if (this.nbits < 48) {
         continue;
       }
       // Store 6 bytes
       const bits = this.bits;
-      this.bits >>= 48;
+      this.bits >>= BigInt(48);
       this.nbits -= 48;
-      const bytes = this.bytes.slice(n, n + 6);
-      bytes[0] = bits;
-      bytes[1] = bits >> 8;
-      bytes[2] = bits >> 16;
-      bytes[3] = bits >> 24;
-      bytes[4] = bits >> 32;
-      bytes[5] = bits >> 40;
+      this.bytes[n + 0] = byte(bits);
+      this.bytes[n + 1] = byte(bits >> BigInt(8));
+      this.bytes[n + 2] = byte(bits >> BigInt(16));
+      this.bytes[n + 3] = byte(bits >> BigInt(24));
+      this.bytes[n + 4] = byte(bits >> BigInt(32));
+      this.bytes[n + 5] = byte(bits >> BigInt(40));
       n += 6;
       if (n < BUFFER_FLUSH_SIZE) {
         continue;
@@ -747,7 +747,6 @@ const huffOffset = (() => {
 //
 // len(h) must be >= 256, and h's elements must be all zeroes.
 function histogram(b: Uint8Array, h: number[]) {
-  h = h.slice(0, 256);
   for (const t of b) {
     h[t]++;
   }
