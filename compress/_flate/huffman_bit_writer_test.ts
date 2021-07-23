@@ -20,7 +20,7 @@ Deno.test("HuffmanBitWriter / block", async () => {
     await testBlockHuff(file.path, out);
   }
 
-  async function testBlockHuff(src: string, out: string) {
+  async function testBlockHuff(src: string, expected: string) {
     const all = await Deno.readFile(src);
 
     const buf = new Buffer();
@@ -30,14 +30,9 @@ Deno.test("HuffmanBitWriter / block", async () => {
     assertEquals(bw.err, undefined);
     await bw.flush();
     let got = buf.bytes();
-    const want = await Deno.readFile(out);
+    const want = await Deno.readFile(expected);
 
-    try {
-      assertEquals(got, want, `${src} != ${out} (see ${src}.got)`);
-    } catch (err) {
-      await Deno.writeFile(src + ".got", got, { mode: 0o666 });
-      throw err;
-    }
+    await assertBytesEqual(got, want, { src, expected });
 
     // Test if the writer produces the same output after reset.
     buf.reset();
@@ -45,16 +40,7 @@ Deno.test("HuffmanBitWriter / block", async () => {
     await bw.writeBlockHuff(false, all);
     await bw.flush();
     got = buf.bytes();
-    try {
-      assertEquals(
-        got,
-        want,
-        `after reset ${src} != ${out} (see ${src}.reset.got)`,
-      );
-    } catch (err) {
-      await Deno.writeFile(src + ".reset.got", got, { mode: 0o666 });
-      throw err;
-    }
+    await assertBytesEqual(got, want, { src, expected });
   }
 });
 
@@ -162,41 +148,48 @@ async function testBlock(test: HuffTest, ttype: string) {
     const bw = new HuffmanBitWriter(buf);
     await writeToType(ttype, bw, test.tokens, input);
     let got = buf.bytes();
-    assertEquals(got, want);
+    await assertBytesEqual(got, want, { src: test.input, expected: testWant });
+
     // Test if the writer produces the same output after reset.
     buf.reset();
     bw.reset(buf);
     await writeToType(ttype, bw, test.tokens, input);
     await bw.flush();
     got = buf.bytes();
-    assertEquals(got, want);
-    await testWriterEOF("wb", test, true);
+    await assertBytesEqual(got, want, { src: test.input, expected: testWant });
+    await testWriterEOF(ttype, test, true);
   }
 
   const wantNI = await Deno.readFile(wantNoInput);
   const buf = new Buffer();
   const bw = new HuffmanBitWriter(buf);
-  await writeToType(ttype, bw, test.tokens, new Uint8Array());
+  await writeToType(ttype, bw, test.tokens, null);
 
   let got = buf.bytes();
-  assertEquals(got, wantNI);
+  await assertBytesEqual(got, wantNI, {
+    src: test.input,
+    expected: wantNoInput,
+  });
   assertNotEquals(got[0] & 1, 1, "got unexpected EOF");
 
   // Test if the writer produces the same output after reset.
   buf.reset();
   bw.reset(buf);
-  await writeToType(ttype, bw, test.tokens, new Uint8Array());
+  await writeToType(ttype, bw, test.tokens, null);
   await bw.flush();
   got = buf.bytes();
-  assertEquals(got, wantNI);
-  await testWriterEOF("wb", test, false);
+  await assertBytesEqual(got, wantNI, {
+    src: test.input,
+    expected: wantNoInput,
+  });
+  await testWriterEOF(ttype, test, false);
 }
 
 async function writeToType(
   ttype: string,
   bw: HuffmanBitWriter,
   tok: Token[],
-  input: Uint8Array,
+  input: Uint8Array | null,
 ) {
   switch (ttype) {
     case "wb":
@@ -258,5 +251,22 @@ async function testWriterEOF(ttype: string, test: HuffTest, useInput: boolean) {
   }
   if ((b[0] & 1) !== 1) {
     throw new Error(`block not marked with EOF for input ${test.input}`);
+  }
+}
+
+async function assertBytesEqual(
+  got: Uint8Array,
+  want: Uint8Array,
+  options: { src: string; expected: string },
+) {
+  try {
+    assertEquals(
+      got,
+      want,
+      `${options.src} != ${options.expected} (see ${options.src}.got)`,
+    );
+  } catch (err) {
+    await Deno.writeFile(options.src + ".got", got, { mode: 0o666 });
+    throw err;
   }
 }

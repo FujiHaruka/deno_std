@@ -450,7 +450,7 @@ export class HuffmanBitWriter {
   // is larger than the original bytes, the data will be written as a
   // stored block.
   // If the input is nil, the tokens will always be Huffman encoded.
-  async writeBlock(tokens: Token[], eof: boolean, input: Uint8Array) {
+  async writeBlock(tokens: Token[], eof: boolean, input: Uint8Array | null) {
     if (this.err) {
       return;
     }
@@ -509,7 +509,7 @@ export class HuffmanBitWriter {
     }
 
     // Stored bytes?
-    if (storable && storedSize < size) {
+    if (input && storable && storedSize < size) {
       await this.writeStoredHeader(input.length, eof);
       await this.writeBytes(input);
       return;
@@ -531,7 +531,11 @@ export class HuffmanBitWriter {
   // histogram distribution.
   // If input is supplied and the compression savings are below 1/16th of the
   // input size the block is stored.
-  async writeBlockDynamic(tokens: Token[], eof: boolean, input: Uint8Array) {
+  async writeBlockDynamic(
+    tokens: Token[],
+    eof: boolean,
+    input: Uint8Array | null,
+  ) {
     if (this.err) {
       return;
     }
@@ -556,7 +560,7 @@ export class HuffmanBitWriter {
 
     // Store bytes, if we don't get a reasonable improvement.
     const [ssize, storable] = this.storedSize(input);
-    if (storable && ssize < (size + size >> 4)) {
+    if (input && storable && ssize < (size + (size >> 4))) {
       await this.writeStoredHeader(input.length, eof);
       await this.writeBytes(input);
       return;
