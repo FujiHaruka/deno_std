@@ -117,7 +117,7 @@ export class HuffmanEncoder {
       lastFreq: 0,
       nextCharFreq: 0,
       nextPairFreq: 0,
-      needed: 0
+      needed: 0,
     }));
 
     // leafCounts[i] counts the number of literals at the left
@@ -274,7 +274,7 @@ export class HuffmanEncoder {
     }
     list[freq.length] = new LiteralNode();
 
-    list = list.slice(0, count)
+    list = list.slice(0, count);
     if (count <= 2) {
       // Handle the small cases here, because they are awkward for the general case code. With
       // two or fewer literals, everything has bit length 1.

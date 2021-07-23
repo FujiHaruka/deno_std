@@ -8,8 +8,7 @@ import { Buffer } from "../../io/buffer.ts";
 import { HuffmanBitWriter } from "./huffman_bit_writer.ts";
 
 Deno.test("HuffmanBitWriter / block", async () => {
-  // const files = expandGlob("testdata/huffman-*.in");
-  const files = expandGlob("testdata/huffman-zero.in");
+  const files = expandGlob("testdata/huffman-*.in");
 
   for await (const file of files) {
     let out = file.path; // for files where input and output are identical
@@ -26,71 +25,42 @@ Deno.test("HuffmanBitWriter / block", async () => {
     const bw = new HuffmanBitWriter(buf);
 
     await bw.writeBlockHuff(false, all);
-    assertEquals(bw.err, undefined)
+    assertEquals(bw.err, undefined);
     await bw.flush();
-    const got = buf.bytes();
+    let got = buf.bytes();
     const want = await Deno.readFile(out);
 
-    assertEquals(got, want);
+    try {
+      assertEquals(got, want, `${src} != ${out} (see ${src}.got)`);
+    } catch (err) {
+      await Deno.writeFile(src + ".got", got, { mode: 0o666 });
+      throw err;
+    }
+
+    // Test if the writer produces the same output after reset.
+    buf.reset();
+    bw.reset(buf);
+    await bw.writeBlockHuff(false, all);
+    await bw.flush();
+    got = buf.bytes();
+    try {
+      assertEquals(
+        got,
+        want,
+        `after reset ${src} != ${out} (see ${src}.reset.got)`,
+      );
+    } catch (err) {
+      await Deno.writeFile(src + ".reset.got", got, { mode: 0o666 });
+      throw err;
+    }
+    // 	buf.Reset()
+    // 	bw.reset(&buf)
+    // 	bw.writeBlockHuff(false, all)
+    // 	bw.flush()
+    // 	got = buf.Bytes()
+    // 	if !bytes.Equal(got, want) {
   }
 });
-
-// func testBlockHuff(t *testing.T, in, out string) {
-// 	all, err := os.ReadFile(in)
-// 	if err != nil {
-// 		t.Error(err)
-// 		return
-// 	}
-// 	var buf bytes.Buffer
-// 	bw := newHuffmanBitWriter(&buf)
-// 	bw.writeBlockHuff(false, all)
-// 	bw.flush()
-// 	got := buf.Bytes()
-
-// 	want, err := os.ReadFile(out)
-// 	if err != nil && !*update {
-// 		t.Error(err)
-// 		return
-// 	}
-
-// 	t.Logf("Testing %q", in)
-// 	if !bytes.Equal(got, want) {
-// 		if *update {
-// 			if in != out {
-// 				t.Logf("Updating %q", out)
-// 				if err := os.WriteFile(out, got, 0666); err != nil {
-// 					t.Error(err)
-// 				}
-// 				return
-// 			}
-// 			// in == out: don't accidentally destroy input
-// 			t.Errorf("WARNING: -update did not rewrite input file %s", in)
-// 		}
-
-// 		t.Errorf("%q != %q (see %q)", in, out, in+".got")
-// 		if err := os.WriteFile(in+".got", got, 0666); err != nil {
-// 			t.Error(err)
-// 		}
-// 		return
-// 	}
-// 	t.Log("Output ok")
-
-// 	// Test if the writer produces the same output after reset.
-// 	buf.Reset()
-// 	bw.reset(&buf)
-// 	bw.writeBlockHuff(false, all)
-// 	bw.flush()
-// 	got = buf.Bytes()
-// 	if !bytes.Equal(got, want) {
-// 		t.Errorf("after reset %q != %q (see %q)", in, out, in+".reset.got")
-// 		if err := os.WriteFile(in+".reset.got", got, 0666); err != nil {
-// 			t.Error(err)
-// 		}
-// 		return
-// 	}
-// 	t.Log("Reset ok")
-// 	testWriterEOF(t, "huff", huffTest{input: in}, true)
-// }
 
 // type huffTest struct {
 // 	tokens      []token

@@ -71,10 +71,12 @@ const OFFSET_BASE = [
 // deno-fmt-ignore
 const codegenOrder = [16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15]
 
-const MAX_BYTES = 2 ** 8
+const MAX_BYTES = 2 ** 8;
 const byte = (n: number | BigInt): number => {
-  return typeof n === 'bigint' ? Number(n % BigInt(MAX_BYTES)) : Number(n) % MAX_BYTES
-}
+  return typeof n === "bigint"
+    ? Number(n % BigInt(MAX_BYTES))
+    : Number(n) % MAX_BYTES;
+};
 
 export class HuffmanBitWriter {
   // Data waiting to be written is bytes[0:nbytes]
@@ -122,7 +124,7 @@ export class HuffmanBitWriter {
       } else {
         this.nbits = 0;
       }
-      n++
+      n++;
     }
     this.bits = BigInt(0);
     await this.write(this.bytes.slice(0, n));
@@ -671,6 +673,7 @@ export class HuffmanBitWriter {
       this.literalEncoding,
       huffOffset.instance(),
     );
+
     this.codegenEncoding.generate(this.codegenFreq, 7);
     // numCodegens Figure out smallest code.
     // Always use dynamic Huffman or Store
@@ -682,7 +685,7 @@ export class HuffmanBitWriter {
 
     // Store bytes, if we don't get a reasonable improvement.
     const [ssize, storable] = this.storedSize(input);
-    if (storable && ssize < (size + size >> 4)) {
+    if (storable && ssize < (size + (size >> 4))) {
       await this.writeStoredHeader(input.length, eof);
       await this.writeBytes(input);
       return;
