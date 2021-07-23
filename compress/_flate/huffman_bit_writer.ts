@@ -30,7 +30,7 @@ const BUFFER_FLUSH_SIZE = 240;
 // which can contain up to 8 bytes.
 const BUFFER_SIZE = BUFFER_FLUSH_SIZE + 8;
 
-const MAX_STORE_BLOCK_SIZE = 65535;
+export const MAX_STORE_BLOCK_SIZE = 65535;
 
 // The number of extra bits needed by length code X - LENGTH_CODES_START.
 // deno-fmt-ignore
