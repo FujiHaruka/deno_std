@@ -12,6 +12,7 @@ pub enum Context {
   Blake2b384(Box<blake2::VarBlake2b>),
   Blake2s(Box<blake2::Blake2s>),
   Blake3(Box<blake3::Hasher>),
+  Crc32(Box<crc32fast::Hasher>),
   Keccak224(Box<sha3::Keccak224>),
   Keccak256(Box<sha3::Keccak256>),
   Keccak384(Box<sha3::Keccak384>),
@@ -45,6 +46,7 @@ impl Context {
       }
       "BLAKE2S" => Blake2s(Default::default()),
       "BLAKE3" => Blake3(Default::default()),
+      "CRC32" => Crc32(Default::default()),
       "KECCAK-224" => Keccak224(Default::default()),
       "KECCAK-256" => Keccak256(Default::default()),
       "KECCAK-384" => Keccak384(Default::default()),
@@ -80,6 +82,7 @@ impl Context {
       Blake2b384(context) => static_block_length(&**context),
       Blake2s(context) => static_block_length(&**context),
       Blake3(context) => static_block_length(&**context),
+      Crc32(_) => 32,
       Keccak224(context) => static_block_length(&**context),
       Keccak256(context) => static_block_length(&**context),
       Keccak384(context) => static_block_length(&**context),
@@ -119,6 +122,7 @@ impl Context {
       Blake2b384(context) => context.output_size(),
       Blake2s(context) => context.output_size(),
       Blake3(context) => context.output_size(),
+      Crc32(_) => 32,
       Keccak224(context) => context.output_size(),
       Keccak256(context) => context.output_size(),
       Keccak384(context) => context.output_size(),
@@ -163,6 +167,7 @@ impl Context {
       Blake2b384(_) => "BLAKE2B-384",
       Blake2s(_) => "BLAKE2S",
       Blake3(_) => "BLAKE3",
+      Crc32(_) => "CRC32",
       Keccak224(_) => "KECCAK-224",
       Keccak256(_) => "KECCAK-256",
       Keccak384(_) => "KECCAK-384",
@@ -190,6 +195,7 @@ impl Context {
       Blake2b384(context) => Reset::reset(&mut **context),
       Blake2s(context) => Reset::reset(&mut **context),
       Blake3(context) => Reset::reset(&mut **context),
+      Crc32(context) => context.reset(),
       Keccak224(context) => Reset::reset(&mut **context),
       Keccak256(context) => Reset::reset(&mut **context),
       Keccak384(context) => Reset::reset(&mut **context),
@@ -217,6 +223,7 @@ impl Context {
       Blake2b384(context) => (&mut **context).update(data),
       Blake2s(context) => Digest::update(&mut **context, data),
       Blake3(context) => Digest::update(&mut **context, data),
+      Crc32(context) => context.update(data),
       Keccak224(context) => Digest::update(&mut **context, data),
       Keccak256(context) => Digest::update(&mut **context, data),
       Keccak384(context) => Digest::update(&mut **context, data),
@@ -257,6 +264,7 @@ impl Context {
       Blake2b384(context) => context.finalize_boxed(),
       Blake2s(context) => context.finalize(),
       Blake3(context) => context.finalize_boxed(length),
+      Crc32(context) => Box::new(context.finalize().to_be_bytes()),
       Keccak224(context) => context.finalize(),
       Keccak256(context) => context.finalize(),
       Keccak384(context) => context.finalize(),
@@ -296,6 +304,11 @@ impl Context {
       Blake2b384(context) => context.finalize_boxed_reset(),
       Blake2s(context) => DynDigest::finalize_reset(context.as_mut()),
       Blake3(context) => context.finalize_boxed_reset(length),
+      Crc32(context) => {
+        let result = Box::new(context.clone().finalize().to_be_bytes());
+        context.reset();
+        result
+      }
       Keccak224(context) => DynDigest::finalize_reset(context.as_mut()),
       Keccak256(context) => DynDigest::finalize_reset(context.as_mut()),
       Keccak384(context) => DynDigest::finalize_reset(context.as_mut()),
