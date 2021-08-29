@@ -448,62 +448,62 @@ Deno.test({
       bool: true,
       bool2: false,
     };
-    const expected = `deno    = "is"
-not     = "[node]"
-regex   = "<ic*s*>"
-NANI    = "何?!"
+    const expected = `deno = "is"
+not = "[node]"
+regex = "<ic*s*>"
+NANI = "何?!"
 comment = "Comment inside # the comment"
-int1    = 99
-int2    = 42
-int3    = 0
-int4    = -17
-int5    = 1000
-int6    = 5349221
-int7    = 12345
-flt1    = 1
-flt2    = 3.1415
-flt3    = -0.01
-flt4    = 5e+22
-flt5    = 1000000
-flt6    = -0.02
-flt7    = 6.626e-34
-odt1    = 1979-05-01T07:32:00.000
-odt2    = 1979-05-27T07:32:00.000
-odt3    = 1979-05-27T07:32:00.999
-odt4    = 1979-05-27T07:32:00.000
-ld1     = 1979-05-27T00:00:00.000
-reg     = "/foo[bar]/"
-sf1     = inf
-sf2     = inf
-sf3     = -inf
-sf4     = NaN
-sf5     = NaN
-sf6     = NaN
-data    = [["gamma","delta"],[1,2]]
-hosts   = ["alpha","omega"]
-bool    = true
-bool2   = false
+int1 = 99
+int2 = 42
+int3 = 0
+int4 = -17
+int5 = 1000
+int6 = 5349221
+int7 = 12345
+flt1 = 1
+flt2 = 3.1415
+flt3 = -0.01
+flt4 = 5e+22
+flt5 = 1000000
+flt6 = -0.02
+flt7 = 6.626e-34
+odt1 = 1979-05-01T07:32:00.000
+odt2 = 1979-05-27T07:32:00.000
+odt3 = 1979-05-27T07:32:00.999
+odt4 = 1979-05-27T07:32:00.000
+ld1 = 1979-05-27T00:00:00.000
+reg = "/foo[bar]/"
+sf1 = inf
+sf2 = inf
+sf3 = -inf
+sf4 = NaN
+sf5 = NaN
+sf6 = NaN
+data = [["gamma","delta"],[1,2]]
+hosts = ["alpha","omega"]
+bool = true
+bool2 = false
 
 [foo]
-bar     = "deno"
+bar = "deno"
 
 [this.is]
-nested  = "denonono"
+nested = "denonono"
 
 ["https://deno.land/std"]
-"$"     = "doller"
+"$" = "doller"
 
 ["##".deno."https://deno.land"]
-proto   = "https"
-":80"   = "port"
+proto = "https"
+":80" = "port"
 
 [[arrayObjects]]
-stuff   = "in"
+stuff = "in"
 
 [[arrayObjects]]
 
 [[arrayObjects]]
-the     = "array"
+the = "array"
 `;
     const actual = stringify(src);
     assertEquals(actual, expected);
@@ -511,7 +511,7 @@ the     = "array"
 });
 
 Deno.test({
-  name: "[TOML] Mixed Array",
+  name: "[TOML] Stringify with mixed Array",
   fn(): void {
     const src = {
       emptyArray: [],
@@ -538,6 +538,50 @@ b = [1,{c = 2,d = [{e = 3},true]}]
 `;
     const actual = stringify(src);
     assertEquals(actual, expected);
+  },
+});
+
+Deno.test({
+  name: "[TOML] Stringify with string values",
+  fn: (): void => {
+    const src = {
+      '"': '"',
+      "'": "'",
+      " ": " ",
+      "\\": "\\",
+      "\n": "\n",
+      "\t": "\t",
+    };
+    const expected = `
+"\\"" = "\\""
+"'" = "'"
+" " = " "
+"\\\\" = "\\\\"
+"\\n" = "\\n"
+"\\t" = "\\t"
+`.trim();
+    const actual = stringify(src).trim();
+    assertEquals(actual, expected);
+    const parsed = parse(actual);
+    assertEquals(src, parsed);
+  },
+});
+
+Deno.test({
+  name: `[TOML] Stringify with object which includes "="`,
+  fn(): void {
+    const src = {
+      "a = 1": "a = 1",
+      longlonglongkey: 1,
+    };
+    const expected = `
+"a = 1" = "a = 1"
+longlonglongkey = 1
+`.trim();
+    const actual = stringify(src).trim();
+    assertEquals(actual, expected);
+    const parsed = parse(actual);
+    assertEquals(src, parsed);
   },
 });
 

@@ -20,7 +20,6 @@ enum ArrayType {
 }
 
 class Dumper {
-  maxPad = 0;
   srcObject: Record<string, unknown>;
   output: string[] = [];
   #arrayTypeCache = new Map<unknown[], ArrayType>();
@@ -168,9 +167,6 @@ class Dumper {
   }
   #declaration(keys: string[]): string {
     const title = joinKeys(keys);
-    if (title.length > this.maxPad) {
-      this.maxPad = title.length;
-    }
     return `${title} = `;
   }
   #arrayDeclaration(keys: string[], value: unknown[]): string {
@@ -210,7 +206,6 @@ class Dumper {
     return `${this.#declaration(keys)}${this.#printDate(value)}`;
   }
   #format(): string[] {
-    const rDeclaration = /(.*)\s=/;
     const out = [];
     for (let i = 0; i < this.output.length; i++) {
       const l = this.output[i];
@@ -223,12 +218,7 @@ class Dumper {
         }
         out.push(l);
       } else {
-        const m = rDeclaration.exec(l);
-        if (m) {
-          out.push(l.replace(m[1], m[1].padEnd(this.maxPad)));
-        } else {
-          out.push(l);
-        }
+        out.push(l);
       }
     }
     // Cleaning multiple spaces
